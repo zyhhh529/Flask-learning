@@ -20,6 +20,11 @@ class Movie(db.Model):  # 表名将会是 movie
     title = db.Column(db.String(60))  # 电影标题
     year = db.Column(db.String(4))  # 电影年份
 
+@app.context_processor
+def inject_user():
+    user = User.query.first()
+    return dict(user=user)
+
 # 创建自定义命令，在命令行中用 flask forge 调用
 @app.cli.command()
 def forge():
@@ -50,14 +55,20 @@ def forge():
     db.session.commit()
     click.echo('Done.')
 
+# 404错误处理函数
+@app.errorhandler(404)  # 传入要处理的错误代码
+def page_not_found(e):  # 接受异常对象作为参数
+    user = User.query.first()
+    return render_template('404.html', user=user), 404  # 返回模板和状态码
+
 # 给函数注册对应的URL
 # hello函数是'/' 和 '/hello'的注册时间函数，当这两个URL被访问时，执行hello函数，并将hello函数返回值返回给浏览器
 @app.route('/')
 def index():
     # 将变量传入模板并渲染
-    user = User.query.first()
+    # user = User.query.first() 使用了上下文处理函数就不再需要这里再取一次user了
     movies = Movie.query.all()
-    return render_template('index.html', user = user, movies = movies)
+    return render_template('index.html', movies = movies) # 这里也不需要再传入user了，模板中可以直接调用
 
 @app.route('/hello')
 def hello():
