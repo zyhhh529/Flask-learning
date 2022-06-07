@@ -1,12 +1,14 @@
+from crypt import methods
 import os
 import click
-from flask import Flask, escape, url_for, render_template
+from flask import Flask, escape, url_for, render_template, request, redirect, flash
 from flask_sqlalchemy import SQLAlchemy
 app = Flask(__name__)
 
 # 连接数据库
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:postgres@localhost:5432/testing'
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config['SECRET_KEY'] = 'dev'  # 等同于 app.secret_key = 'dev'
 
 db = SQLAlchemy(app)
 
@@ -63,8 +65,22 @@ def page_not_found(e):  # 接受异常对象作为参数
 
 # 给函数注册对应的URL
 # hello函数是'/' 和 '/hello'的注册时间函数，当这两个URL被访问时，执行hello函数，并将hello函数返回值返回给浏览器
-@app.route('/')
+@app.route('/', methods=['GET', 'POST']) # 如果不设置methods，默认只支持GET
 def index():
+    # 请求信息被放在了request里面
+    print(111)
+    if request.method == 'POST': # 如果一个函数对应多种请求，可以用if...else对不同请求写不同逻辑
+        title = request.form.get('title')
+        year = request.form.get('year')
+        print(title, year)
+        if not title or not year or len(year)>4 or len(title)>60:
+            flash('Invalid input.')
+            return redirect(url_for('index'))
+        movie = Movie(title=title, year=year)
+        db.session.add(movie)
+        db.session.commit()
+        flash('Item created!')
+        return redirect(url_for('index'))
     # 将变量传入模板并渲染
     # user = User.query.first() 使用了上下文处理函数就不再需要这里再取一次user了
     movies = Movie.query.all()
@@ -86,3 +102,31 @@ def test():
     print(url_for('user_page', name='Sam')) # /user/Sam
     print(url_for('hello', name='Sam')) # /hello?name=Sam
     return 'Test page, see terminal'
+
+@app.route('/movie/edit/<int:movie_id>', methods=['GET', 'POST'])
+def edit(movie_id):
+    movie = Movie.query.get_or_404(movie_id)
+
+    if request.method == 'POST':  # 处理编辑表单的提交请求
+        title = request.form['title']
+        year = request.form['year']
+
+        if not title or not year or len(year) != 4 or len(title) > 60:
+            flash('Invalid input.')
+            return redirect(url_for('edit', movie_id=movie_id))  # 重定向回对应的编辑页面
+
+        movie.title = title  # 更新标题
+        movie.year = year  # 更新年份
+        db.session.commit()  # 提交数据库会话
+        flash('Item updated.')
+        return redirect(url_for('index'))  # 重定向回主页
+
+    return render_template('edit.html', movie=movie)  # 传入被编辑的电影记录
+
+@app.route('/movie/delete/<int:movie_id>', methods=['POST'])  # 限定只接受 POST 请求
+def delete(movie_id):
+    movie = Movie.query.get_or_404(movie_id)  # 获取电影记录
+    db.session.delete(movie)  # 删除对应的记录
+    db.session.commit()  # 提交数据库会话
+    flash('Item deleted.')
+    return redirect(url_for('index'))  # 重定向回主页
